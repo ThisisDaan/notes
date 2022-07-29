@@ -163,6 +163,9 @@ var app = (function () {
     function children(element) {
         return Array.from(element.childNodes);
     }
+    function toggle_class(element, name, toggle) {
+        element.classList[toggle ? 'add' : 'remove'](name);
+    }
     function custom_event(type, detail, { bubbles = false, cancelable = false } = {}) {
         const e = document.createEvent('CustomEvent');
         e.initCustomEvent(type, bubbles, cancelable, detail);
@@ -338,6 +341,10 @@ var app = (function () {
             update_scheduled = true;
             resolved_promise.then(flush);
         }
+    }
+    function tick() {
+        schedule_update();
+        return resolved_promise;
     }
     function add_render_callback(fn) {
         render_callbacks.push(fn);
@@ -927,8 +934,8 @@ var app = (function () {
     		c: function create() {
     			button = element("button");
     			if (default_slot) default_slot.c();
-    			attr_dev(button, "class", button_class_value = "text-white font-medium rounded-lg p-4 " + (/*type*/ ctx[0] ? /*type*/ ctx[0] : ''));
-    			add_location(button, file$1, 4, 0, 49);
+    			attr_dev(button, "class", button_class_value = "transition-all duration-300 text-white font-medium flex space-x-2 items-center justify-center " + /*className*/ ctx[0]);
+    			add_location(button, file$1, 4, 0, 54);
     		},
     		l: function claim(nodes) {
     			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
@@ -963,7 +970,7 @@ var app = (function () {
     				}
     			}
 
-    			if (!current || dirty & /*type*/ 1 && button_class_value !== (button_class_value = "text-white font-medium rounded-lg p-4 " + (/*type*/ ctx[0] ? /*type*/ ctx[0] : ''))) {
+    			if (!current || dirty & /*className*/ 1 && button_class_value !== (button_class_value = "transition-all duration-300 text-white font-medium flex space-x-2 items-center justify-center " + /*className*/ ctx[0])) {
     				attr_dev(button, "class", button_class_value);
     			}
     		},
@@ -998,8 +1005,8 @@ var app = (function () {
     function instance$1($$self, $$props, $$invalidate) {
     	let { $$slots: slots = {}, $$scope } = $$props;
     	validate_slots('Button', slots, ['default']);
-    	let { type = '' } = $$props;
-    	const writable_props = ['type'];
+    	let { className = '' } = $$props;
+    	const writable_props = ['className'];
 
     	Object.keys($$props).forEach(key => {
     		if (!~writable_props.indexOf(key) && key.slice(0, 2) !== '$$' && key !== 'slot') console.warn(`<Button> was created with unknown prop '${key}'`);
@@ -1010,27 +1017,27 @@ var app = (function () {
     	}
 
     	$$self.$$set = $$props => {
-    		if ('type' in $$props) $$invalidate(0, type = $$props.type);
+    		if ('className' in $$props) $$invalidate(0, className = $$props.className);
     		if ('$$scope' in $$props) $$invalidate(1, $$scope = $$props.$$scope);
     	};
 
-    	$$self.$capture_state = () => ({ type });
+    	$$self.$capture_state = () => ({ className });
 
     	$$self.$inject_state = $$props => {
-    		if ('type' in $$props) $$invalidate(0, type = $$props.type);
+    		if ('className' in $$props) $$invalidate(0, className = $$props.className);
     	};
 
     	if ($$props && "$$inject" in $$props) {
     		$$self.$inject_state($$props.$$inject);
     	}
 
-    	return [type, $$scope, slots, click_handler];
+    	return [className, $$scope, slots, click_handler];
     }
 
     class Button extends SvelteComponentDev {
     	constructor(options) {
     		super(options);
-    		init(this, options, instance$1, create_fragment$1, safe_not_equal, { type: 0 });
+    		init(this, options, instance$1, create_fragment$1, safe_not_equal, { className: 0 });
 
     		dispatch_dev("SvelteRegisterComponent", {
     			component: this,
@@ -1040,13 +1047,87 @@ var app = (function () {
     		});
     	}
 
-    	get type() {
+    	get className() {
     		throw new Error("<Button>: Props cannot be read directly from the component instance unless compiling with 'accessors: true' or '<svelte:options accessors/>'");
     	}
 
-    	set type(value) {
+    	set className(value) {
     		throw new Error("<Button>: Props cannot be set directly on the component instance unless compiling with 'accessors: true' or '<svelte:options accessors/>'");
     	}
+    }
+
+    // Unique ID creation requires a high quality random # generator. In the browser we therefore
+    // require the crypto API and do not support built-in fallback to lower quality random number
+    // generators (like Math.random()).
+    var getRandomValues;
+    var rnds8 = new Uint8Array(16);
+    function rng() {
+      // lazy load so that environments that need to polyfill have a chance to do so
+      if (!getRandomValues) {
+        // getRandomValues needs to be invoked in a context where "this" is a Crypto implementation. Also,
+        // find the complete implementation of crypto (msCrypto) on IE11.
+        getRandomValues = typeof crypto !== 'undefined' && crypto.getRandomValues && crypto.getRandomValues.bind(crypto) || typeof msCrypto !== 'undefined' && typeof msCrypto.getRandomValues === 'function' && msCrypto.getRandomValues.bind(msCrypto);
+
+        if (!getRandomValues) {
+          throw new Error('crypto.getRandomValues() not supported. See https://github.com/uuidjs/uuid#getrandomvalues-not-supported');
+        }
+      }
+
+      return getRandomValues(rnds8);
+    }
+
+    var REGEX = /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}|00000000-0000-0000-0000-000000000000)$/i;
+
+    function validate(uuid) {
+      return typeof uuid === 'string' && REGEX.test(uuid);
+    }
+
+    /**
+     * Convert array of 16 byte values to UUID string format of the form:
+     * XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX
+     */
+
+    var byteToHex = [];
+
+    for (var i = 0; i < 256; ++i) {
+      byteToHex.push((i + 0x100).toString(16).substr(1));
+    }
+
+    function stringify(arr) {
+      var offset = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : 0;
+      // Note: Be careful editing this code!  It's been tuned for performance
+      // and works in ways you may not expect. See https://github.com/uuidjs/uuid/pull/434
+      var uuid = (byteToHex[arr[offset + 0]] + byteToHex[arr[offset + 1]] + byteToHex[arr[offset + 2]] + byteToHex[arr[offset + 3]] + '-' + byteToHex[arr[offset + 4]] + byteToHex[arr[offset + 5]] + '-' + byteToHex[arr[offset + 6]] + byteToHex[arr[offset + 7]] + '-' + byteToHex[arr[offset + 8]] + byteToHex[arr[offset + 9]] + '-' + byteToHex[arr[offset + 10]] + byteToHex[arr[offset + 11]] + byteToHex[arr[offset + 12]] + byteToHex[arr[offset + 13]] + byteToHex[arr[offset + 14]] + byteToHex[arr[offset + 15]]).toLowerCase(); // Consistency check for valid UUID.  If this throws, it's likely due to one
+      // of the following:
+      // - One or more input array values don't map to a hex octet (leading to
+      // "undefined" in the uuid)
+      // - Invalid input values for the RFC `version` or `variant` fields
+
+      if (!validate(uuid)) {
+        throw TypeError('Stringified UUID is invalid');
+      }
+
+      return uuid;
+    }
+
+    function v4(options, buf, offset) {
+      options = options || {};
+      var rnds = options.random || (options.rng || rng)(); // Per 4.4, set bits for version and `clock_seq_hi_and_reserved`
+
+      rnds[6] = rnds[6] & 0x0f | 0x40;
+      rnds[8] = rnds[8] & 0x3f | 0x80; // Copy bytes to buffer, if provided
+
+      if (buf) {
+        offset = offset || 0;
+
+        for (var i = 0; i < 16; ++i) {
+          buf[offset + i] = rnds[i];
+        }
+
+        return buf;
+      }
+
+      return stringify(rnds);
     }
 
     /* src\App.svelte generated by Svelte v3.49.0 */
@@ -1054,23 +1135,72 @@ var app = (function () {
 
     function get_each_context(ctx, list, i) {
     	const child_ctx = ctx.slice();
-    	child_ctx[10] = list[i];
+    	child_ctx[12] = list[i];
     	return child_ctx;
     }
 
-    // (68:1) <Button type="primary" on:click="{addNote}">
-    function create_default_slot_1(ctx) {
-    	let t;
+    // (128:4) <Button className="rounded-full primary p-4 shadow-lg shadow-black/40 md:rounded-lg" on:click="{addNote}">
+    function create_default_slot_2(ctx) {
+    	let i;
+    	let t0;
+    	let span;
 
     	const block = {
     		c: function create() {
-    			t = text("Add Note");
+    			i = element("i");
+    			t0 = space();
+    			span = element("span");
+    			span.textContent = "Add Note";
+    			attr_dev(i, "class", "fa-solid fa-plus fa-fw text-2xl");
+    			add_location(i, file, 128, 5, 2700);
+    			attr_dev(span, "class", "hidden md:block");
+    			add_location(span, file, 129, 5, 2753);
     		},
     		m: function mount(target, anchor) {
-    			insert_dev(target, t, anchor);
+    			insert_dev(target, i, anchor);
+    			insert_dev(target, t0, anchor);
+    			insert_dev(target, span, anchor);
     		},
+    		p: noop,
     		d: function destroy(detaching) {
-    			if (detaching) detach_dev(t);
+    			if (detaching) detach_dev(i);
+    			if (detaching) detach_dev(t0);
+    			if (detaching) detach_dev(span);
+    		}
+    	};
+
+    	dispatch_dev("SvelteRegisterBlock", {
+    		block,
+    		id: create_default_slot_2.name,
+    		type: "slot",
+    		source: "(128:4) <Button className=\\\"rounded-full primary p-4 shadow-lg shadow-black/40 md:rounded-lg\\\" on:click=\\\"{addNote}\\\">",
+    		ctx
+    	});
+
+    	return block;
+    }
+
+    // (138:6) <Button className="opacity-40 {note.sticky ? 'opacity-80' : 'hover:opacity-80'} p-2" on:click="{stickyNote(note)}">
+    function create_default_slot_1(ctx) {
+    	let div;
+    	let i;
+
+    	const block = {
+    		c: function create() {
+    			div = element("div");
+    			i = element("i");
+    			attr_dev(i, "class", "fa-solid fa-thumbtack fa-fw text-sm");
+    			add_location(i, file, 139, 8, 3427);
+    			attr_dev(div, "class", "text-black aspect-square");
+    			add_location(div, file, 138, 7, 3380);
+    		},
+    		m: function mount(target, anchor) {
+    			insert_dev(target, div, anchor);
+    			append_dev(div, i);
+    		},
+    		p: noop,
+    		d: function destroy(detaching) {
+    			if (detaching) detach_dev(div);
     		}
     	};
 
@@ -1078,14 +1208,14 @@ var app = (function () {
     		block,
     		id: create_default_slot_1.name,
     		type: "slot",
-    		source: "(68:1) <Button type=\\\"primary\\\" on:click=\\\"{addNote}\\\">",
+    		source: "(138:6) <Button className=\\\"opacity-40 {note.sticky ? 'opacity-80' : 'hover:opacity-80'} p-2\\\" on:click=\\\"{stickyNote(note)}\\\">",
     		ctx
     	});
 
     	return block;
     }
 
-    // (77:6) <Button type="danger" on:click="{deleteNote(note.id)}">
+    // (143:6) <Button className="opacity-40 hover:opacity-80 p-2" on:click="{deleteNote(note.id)}">
     function create_default_slot(ctx) {
     	let div;
     	let i;
@@ -1094,10 +1224,10 @@ var app = (function () {
     		c: function create() {
     			div = element("div");
     			i = element("i");
-    			attr_dev(i, "class", "fa-solid fa-trash fa-fw");
-    			add_location(i, file, 78, 8, 1938);
-    			attr_dev(div, "class", "text-white aspect-square");
-    			add_location(div, file, 77, 7, 1891);
+    			attr_dev(i, "class", "fa-solid fa-close fa-fw text-sm");
+    			add_location(i, file, 144, 8, 3655);
+    			attr_dev(div, "class", "text-black aspect-square");
+    			add_location(div, file, 143, 7, 3608);
     		},
     		m: function mount(target, anchor) {
     			insert_dev(target, div, anchor);
@@ -1113,86 +1243,104 @@ var app = (function () {
     		block,
     		id: create_default_slot.name,
     		type: "slot",
-    		source: "(77:6) <Button type=\\\"danger\\\" on:click=\\\"{deleteNote(note.id)}\\\">",
+    		source: "(143:6) <Button className=\\\"opacity-40 hover:opacity-80 p-2\\\" on:click=\\\"{deleteNote(note.id)}\\\">",
     		ctx
     	});
 
     	return block;
     }
 
-    // (70:2) {#each notes as note (note.id)}
+    // (135:3) {#each notes as note (note.id)}
     function create_each_block(key_1, ctx) {
-    	let div3;
-    	let div0;
-    	let t0_value = /*note*/ ctx[10].text + "";
-    	let t0;
-    	let div0_id_value;
-    	let t1;
     	let div2;
+    	let div0;
+    	let button0;
+    	let t0;
+    	let button1;
+    	let t1;
     	let div1;
-    	let button;
+    	let t2_value = /*note*/ ctx[12].text + "";
     	let t2;
-    	let div3_transition;
+    	let div1_id_value;
+    	let t3;
+    	let div2_class_value;
+    	let div2_transition;
     	let rect;
     	let stop_animation = noop;
     	let current;
     	let mounted;
     	let dispose;
 
-    	button = new Button({
+    	button0 = new Button({
     			props: {
-    				type: "danger",
+    				className: "opacity-40 " + (/*note*/ ctx[12].sticky
+    				? 'opacity-80'
+    				: 'hover:opacity-80') + " p-2",
+    				$$slots: { default: [create_default_slot_1] },
+    				$$scope: { ctx }
+    			},
+    			$$inline: true
+    		});
+
+    	button0.$on("click", function () {
+    		if (is_function(/*stickyNote*/ ctx[4](/*note*/ ctx[12]))) /*stickyNote*/ ctx[4](/*note*/ ctx[12]).apply(this, arguments);
+    	});
+
+    	button1 = new Button({
+    			props: {
+    				className: "opacity-40 hover:opacity-80 p-2",
     				$$slots: { default: [create_default_slot] },
     				$$scope: { ctx }
     			},
     			$$inline: true
     		});
 
-    	button.$on("click", function () {
-    		if (is_function(/*deleteNote*/ ctx[3](/*note*/ ctx[10].id))) /*deleteNote*/ ctx[3](/*note*/ ctx[10].id).apply(this, arguments);
+    	button1.$on("click", function () {
+    		if (is_function(/*deleteNote*/ ctx[5](/*note*/ ctx[12].id))) /*deleteNote*/ ctx[5](/*note*/ ctx[12].id).apply(this, arguments);
     	});
 
     	const block = {
     		key: key_1,
     		first: null,
     		c: function create() {
-    			div3 = element("div");
-    			div0 = element("div");
-    			t0 = text(t0_value);
-    			t1 = space();
     			div2 = element("div");
+    			div0 = element("div");
+    			create_component(button0.$$.fragment);
+    			t0 = space();
+    			create_component(button1.$$.fragment);
+    			t1 = space();
     			div1 = element("div");
-    			create_component(button.$$.fragment);
-    			t2 = space();
-    			attr_dev(div0, "id", div0_id_value = /*note*/ ctx[10].id);
-    			attr_dev(div0, "contenteditable", "true");
-    			attr_dev(div0, "class", "prose h-full w-full text-white");
-    			add_location(div0, file, 71, 4, 1632);
-    			attr_dev(div1, "class", "ml-auto ");
-    			add_location(div1, file, 75, 5, 1799);
-    			attr_dev(div2, "class", "flex");
-    			add_location(div2, file, 74, 4, 1775);
-    			attr_dev(div3, "class", "ring-2 rounded-lg p-4 w-96 h-96 flex flex-col space-y-4");
-    			add_location(div3, file, 70, 3, 1510);
-    			this.first = div3;
+    			t2 = text(t2_value);
+    			t3 = space();
+    			attr_dev(div0, "class", "flex justify-between items-center bg-black/20 hover:bg-black/25 cursor-pointer");
+    			add_location(div0, file, 136, 5, 3158);
+    			attr_dev(div1, "id", div1_id_value = /*note*/ ctx[12].id);
+    			attr_dev(div1, "contenteditable", "true");
+    			attr_dev(div1, "class", "prose h-full w-full text-black/80 p-4 text-lg font-medium");
+    			add_location(div1, file, 148, 5, 3750);
+    			attr_dev(div2, "class", div2_class_value = "relative shadow-lg rounded-lg overflow-hidden aspect-square flex flex-col " + /*note*/ ctx[12].color);
+    			toggle_class(div2, "order-first", /*note*/ ctx[12].sticky);
+    			add_location(div2, file, 135, 4, 2970);
+    			this.first = div2;
     		},
     		m: function mount(target, anchor) {
-    			insert_dev(target, div3, anchor);
-    			append_dev(div3, div0);
+    			insert_dev(target, div2, anchor);
+    			append_dev(div2, div0);
+    			mount_component(button0, div0, null);
     			append_dev(div0, t0);
-    			append_dev(div3, t1);
-    			append_dev(div3, div2);
+    			mount_component(button1, div0, null);
+    			append_dev(div2, t1);
     			append_dev(div2, div1);
-    			mount_component(button, div1, null);
-    			append_dev(div3, t2);
+    			append_dev(div1, t2);
+    			append_dev(div2, t3);
     			current = true;
 
     			if (!mounted) {
     				dispose = listen_dev(
-    					div0,
+    					div1,
     					"input",
     					function () {
-    						if (is_function(/*saveNote*/ ctx[2](/*note*/ ctx[10]))) /*saveNote*/ ctx[2](/*note*/ ctx[10]).apply(this, arguments);
+    						if (is_function(/*saveNote*/ ctx[3](/*note*/ ctx[12]))) /*saveNote*/ ctx[3](/*note*/ ctx[12]).apply(this, arguments);
     					},
     					false,
     					false,
@@ -1204,53 +1352,74 @@ var app = (function () {
     		},
     		p: function update(new_ctx, dirty) {
     			ctx = new_ctx;
-    			if ((!current || dirty & /*notes*/ 1) && t0_value !== (t0_value = /*note*/ ctx[10].text + "")) set_data_dev(t0, t0_value);
+    			const button0_changes = {};
 
-    			if (!current || dirty & /*notes*/ 1 && div0_id_value !== (div0_id_value = /*note*/ ctx[10].id)) {
-    				attr_dev(div0, "id", div0_id_value);
+    			if (dirty & /*notes*/ 1) button0_changes.className = "opacity-40 " + (/*note*/ ctx[12].sticky
+    			? 'opacity-80'
+    			: 'hover:opacity-80') + " p-2";
+
+    			if (dirty & /*$$scope*/ 32768) {
+    				button0_changes.$$scope = { dirty, ctx };
     			}
 
-    			const button_changes = {};
+    			button0.$set(button0_changes);
+    			const button1_changes = {};
 
-    			if (dirty & /*$$scope*/ 8192) {
-    				button_changes.$$scope = { dirty, ctx };
+    			if (dirty & /*$$scope*/ 32768) {
+    				button1_changes.$$scope = { dirty, ctx };
     			}
 
-    			button.$set(button_changes);
+    			button1.$set(button1_changes);
+    			if ((!current || dirty & /*notes*/ 1) && t2_value !== (t2_value = /*note*/ ctx[12].text + "")) set_data_dev(t2, t2_value);
+
+    			if (!current || dirty & /*notes*/ 1 && div1_id_value !== (div1_id_value = /*note*/ ctx[12].id)) {
+    				attr_dev(div1, "id", div1_id_value);
+    			}
+
+    			if (!current || dirty & /*notes*/ 1 && div2_class_value !== (div2_class_value = "relative shadow-lg rounded-lg overflow-hidden aspect-square flex flex-col " + /*note*/ ctx[12].color)) {
+    				attr_dev(div2, "class", div2_class_value);
+    			}
+
+    			if (dirty & /*notes, notes*/ 1) {
+    				toggle_class(div2, "order-first", /*note*/ ctx[12].sticky);
+    			}
     		},
     		r: function measure() {
-    			rect = div3.getBoundingClientRect();
+    			rect = div2.getBoundingClientRect();
     		},
     		f: function fix() {
-    			fix_position(div3);
+    			fix_position(div2);
     			stop_animation();
-    			add_transform(div3, rect);
+    			add_transform(div2, rect);
     		},
     		a: function animate() {
     			stop_animation();
-    			stop_animation = create_animation(div3, rect, flip, { duration: 300 });
+    			stop_animation = create_animation(div2, rect, flip, { duration: 300 });
     		},
     		i: function intro(local) {
     			if (current) return;
-    			transition_in(button.$$.fragment, local);
+    			transition_in(button0.$$.fragment, local);
+    			transition_in(button1.$$.fragment, local);
 
     			add_render_callback(() => {
-    				if (!div3_transition) div3_transition = create_bidirectional_transition(div3, fly, {}, true);
-    				div3_transition.run(1);
+    				if (!div2_transition) div2_transition = create_bidirectional_transition(div2, fly, {}, true);
+    				div2_transition.run(1);
     			});
 
     			current = true;
     		},
     		o: function outro(local) {
-    			transition_out(button.$$.fragment, local);
-    			if (!div3_transition) div3_transition = create_bidirectional_transition(div3, fly, {}, false);
-    			div3_transition.run(0);
+    			transition_out(button0.$$.fragment, local);
+    			transition_out(button1.$$.fragment, local);
+    			if (!div2_transition) div2_transition = create_bidirectional_transition(div2, fly, {}, false);
+    			div2_transition.run(0);
     			current = false;
     		},
     		d: function destroy(detaching) {
-    			if (detaching) detach_dev(div3);
-    			destroy_component(button);
-    			if (detaching && div3_transition) div3_transition.end();
+    			if (detaching) detach_dev(div2);
+    			destroy_component(button0);
+    			destroy_component(button1);
+    			if (detaching && div2_transition) div2_transition.end();
     			mounted = false;
     			dispose();
     		}
@@ -1260,7 +1429,7 @@ var app = (function () {
     		block,
     		id: create_each_block.name,
     		type: "each",
-    		source: "(70:2) {#each notes as note (note.id)}",
+    		source: "(135:3) {#each notes as note (note.id)}",
     		ctx
     	});
 
@@ -1268,29 +1437,34 @@ var app = (function () {
     }
 
     function create_fragment(ctx) {
-    	let div;
+    	let div3;
+    	let div2;
+    	let div1;
     	let h1;
     	let t1;
+    	let div0;
     	let button;
     	let t2;
     	let main;
     	let each_blocks = [];
     	let each_1_lookup = new Map();
     	let current;
+    	let mounted;
+    	let dispose;
 
     	button = new Button({
     			props: {
-    				type: "primary",
-    				$$slots: { default: [create_default_slot_1] },
+    				className: "rounded-full primary p-4 shadow-lg shadow-black/40 md:rounded-lg",
+    				$$slots: { default: [create_default_slot_2] },
     				$$scope: { ctx }
     			},
     			$$inline: true
     		});
 
-    	button.$on("click", /*addNote*/ ctx[1]);
+    	button.$on("click", /*addNote*/ ctx[2]);
     	let each_value = /*notes*/ ctx[0];
     	validate_each_argument(each_value);
-    	const get_key = ctx => /*note*/ ctx[10].id;
+    	const get_key = ctx => /*note*/ ctx[12].id;
     	validate_each_keys(ctx, each_value, get_each_context, get_key);
 
     	for (let i = 0; i < each_value.length; i += 1) {
@@ -1301,10 +1475,13 @@ var app = (function () {
 
     	const block = {
     		c: function create() {
-    			div = element("div");
+    			div3 = element("div");
+    			div2 = element("div");
+    			div1 = element("div");
     			h1 = element("h1");
-    			h1.textContent = "Note";
+    			h1.textContent = "Notes";
     			t1 = space();
+    			div0 = element("div");
     			create_component(button.$$.fragment);
     			t2 = space();
     			main = element("main");
@@ -1313,40 +1490,54 @@ var app = (function () {
     				each_blocks[i].c();
     			}
 
-    			attr_dev(h1, "class", "text-white text-2xl");
-    			add_location(h1, file, 66, 1, 1304);
-    			attr_dev(main, "class", "grid grid-cols-3 grid-rows-4 gap-8 duration-300");
-    			add_location(main, file, 68, 1, 1410);
-    			attr_dev(div, "class", "p-8 space-y-8 bg-gray-900 h-full w-full min-h-screen");
-    			add_location(div, file, 65, 0, 1236);
+    			attr_dev(h1, "class", "text-white text-4xl font-medium");
+    			add_location(h1, file, 125, 3, 2463);
+    			attr_dev(div0, "class", "fixed p-8 bottom-0 right-0 z-20 md:static md:p-0");
+    			add_location(div0, file, 126, 3, 2521);
+    			attr_dev(div1, "class", "flex items-center justify-between");
+    			add_location(div1, file, 124, 2, 2412);
+    			attr_dev(main, "class", "grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-8 duration-300 ");
+    			add_location(main, file, 133, 2, 2834);
+    			attr_dev(div2, "class", "max-w-7xl p-8 space-y-8 w-full");
+    			add_location(div2, file, 123, 1, 2365);
+    			attr_dev(div3, "class", "bg-gray-900 h-full w-full min-h-screen flex flex-col items-center");
+    			add_location(div3, file, 122, 0, 2284);
     		},
     		l: function claim(nodes) {
     			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
     		},
     		m: function mount(target, anchor) {
-    			insert_dev(target, div, anchor);
-    			append_dev(div, h1);
-    			append_dev(div, t1);
-    			mount_component(button, div, null);
-    			append_dev(div, t2);
-    			append_dev(div, main);
+    			insert_dev(target, div3, anchor);
+    			append_dev(div3, div2);
+    			append_dev(div2, div1);
+    			append_dev(div1, h1);
+    			append_dev(div1, t1);
+    			append_dev(div1, div0);
+    			mount_component(button, div0, null);
+    			append_dev(div2, t2);
+    			append_dev(div2, main);
 
     			for (let i = 0; i < each_blocks.length; i += 1) {
     				each_blocks[i].m(main, null);
     			}
 
     			current = true;
+
+    			if (!mounted) {
+    				dispose = listen_dev(window, "storage", /*getNotes*/ ctx[1], false, false, false);
+    				mounted = true;
+    			}
     		},
     		p: function update(ctx, [dirty]) {
     			const button_changes = {};
 
-    			if (dirty & /*$$scope*/ 8192) {
+    			if (dirty & /*$$scope*/ 32768) {
     				button_changes.$$scope = { dirty, ctx };
     			}
 
     			button.$set(button_changes);
 
-    			if (dirty & /*deleteNote, notes, saveNote*/ 13) {
+    			if (dirty & /*notes, saveNote, deleteNote, stickyNote*/ 57) {
     				each_value = /*notes*/ ctx[0];
     				validate_each_argument(each_value);
     				group_outros();
@@ -1377,12 +1568,15 @@ var app = (function () {
     			current = false;
     		},
     		d: function destroy(detaching) {
-    			if (detaching) detach_dev(div);
+    			if (detaching) detach_dev(div3);
     			destroy_component(button);
 
     			for (let i = 0; i < each_blocks.length; i += 1) {
     				each_blocks[i].d();
     			}
+
+    			mounted = false;
+    			dispose();
     		}
     	};
 
@@ -1395,6 +1589,11 @@ var app = (function () {
     	});
 
     	return block;
+    }
+
+    function randomChoice(choices) {
+    	const index = Math.floor(Math.random() * choices.length);
+    	return choices[index];
     }
 
     function instance($$self, $$props, $$invalidate) {
@@ -1422,30 +1621,83 @@ var app = (function () {
     		saveArrayToLocalStorage('notes', notes);
     	};
 
-    	const getNotes = () => {
-    		const localNotes = getArrayFromLocalStorage('notes');
+    	const getNotes = event => {
+    		tick().then(() => {
+    			const localNotes = getArrayFromLocalStorage('notes');
 
-    		if (localNotes) {
-    			$$invalidate(0, notes = localNotes);
-    		}
+    			if (localNotes) {
+    				$$invalidate(0, notes = [...localNotes]);
+    			}
+    		});
+    	};
+
+    	const randomColorClass = () => {
+    		const colors = [
+    			"bg-red-400",
+    			"bg-orange-400",
+    			"bg-amber-400",
+    			"bg-amber-400",
+    			"bg-lime-400",
+    			"bg-green-400",
+    			"bg-emerald-400",
+    			"bg-teal-400",
+    			"bg-cyan-400",
+    			"bg-sky-400",
+    			"bg-blue-400",
+    			"bg-indigo-400",
+    			"bg-violet-400",
+    			"bg-purple-400",
+    			"bg-fuchsia-400",
+    			"bg-pink-400",
+    			"bg-rose-400"
+    		];
+
+    		return randomChoice(colors);
     	};
 
     	const addNote = () => {
-    		$$invalidate(0, notes = [...notes, { id: crypto.randomUUID(), text: "" }]);
-    		saveNotes();
+    		$$invalidate(0, notes = [
+    			...notes,
+    			{
+    				id: v4(),
+    				color: randomColorClass(),
+    				text: "",
+    				sticky: false
+    			}
+    		]);
+
+    		tick().then(() => {
+    			saveNotes();
+    		});
     	};
 
     	const saveNote = note => {
+    		tick().then(() => {
+    			const indexOfNote = notes.indexOf(note);
+    			const noteElement = document.getElementById(note.id);
+    			note.text = noteElement.textContent;
+    			$$invalidate(0, notes[indexOfNote] = note, notes);
+    			saveNotes();
+    		});
+    	};
+
+    	const stickyNote = note => {
     		const indexOfNote = notes.indexOf(note);
-    		const noteElement = document.getElementById(note.id);
-    		note.text = noteElement.textContent;
+    		document.getElementById(note.id);
+    		note.sticky = !note.sticky;
     		$$invalidate(0, notes[indexOfNote] = note, notes);
-    		saveNotes();
+
+    		tick().then(() => {
+    			saveNotes();
+    		});
     	};
 
     	const deleteNote = id => {
     		$$invalidate(0, notes = notes.filter(n => n.id != id));
-    		saveNotes();
+
+    		tick().then(() => {
+    			saveNotes();
+    		});
     	};
 
     	onMount(async () => {
@@ -1459,10 +1711,12 @@ var app = (function () {
     	});
 
     	$$self.$capture_state = () => ({
+    		tick,
     		onMount,
     		fly,
     		flip,
     		Button,
+    		uuidv4: v4,
     		notes,
     		saveToLocalStorage,
     		saveArrayToLocalStorage,
@@ -1470,8 +1724,11 @@ var app = (function () {
     		getArrayFromLocalStorage,
     		saveNotes,
     		getNotes,
+    		randomChoice,
+    		randomColorClass,
     		addNote,
     		saveNote,
+    		stickyNote,
     		deleteNote
     	});
 
@@ -1483,7 +1740,7 @@ var app = (function () {
     		$$self.$inject_state($$props.$$inject);
     	}
 
-    	return [notes, addNote, saveNote, deleteNote];
+    	return [notes, getNotes, addNote, saveNote, stickyNote, deleteNote];
     }
 
     class App extends SvelteComponentDev {

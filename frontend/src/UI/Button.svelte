@@ -1,7 +1,7 @@
 <script>
-    export let type = ''
+    export let className = ''
 </script>
 
-<button on:click class="text-white font-medium rounded-lg p-4 {type ? type : ''}">
+<button on:click class="transition-all duration-300 text-white font-medium flex space-x-2 items-center justify-center {className}">
     <slot />  
 </button>
